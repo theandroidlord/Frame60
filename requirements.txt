@@ -1,0 +1,3 @@
+# frame60 uses only the Python standard library -- nothing to install here.
+# The only real dependency is the ffmpeg / ffprobe binaries (see install.sh
+# or README.md).
