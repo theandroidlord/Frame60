@@ -12,6 +12,21 @@ Tested end-to-end for real: a 24fps clip converted, verified 60fps with
 ffprobe, chunk splitting, checkpoint/resume, and the no-sensor fallback
 all confirmed working before this ever shipped to you.
 
+## Never touched a terminal? Start here 🔰
+
+You do **not** need to learn any commands or copy-paste anything. After
+the one-time install below:
+
+- **Termux (phone):** run `bash start.sh`
+- **Windows:** double-click `start.bat`
+
+Either one drops you straight into a guided menu — pick your video from a
+numbered list, answer a few plain questions (or just hit Enter to accept
+the sensible default each time), confirm, done. No flags, no syntax to
+remember. Everything below this point (`--profile`, `--mode`, etc.) is
+for people who want to skip the menu and drive it directly — totally
+optional.
+
 ## Real talk before you load the bar 🏋️
 
 `--mode interpolate` (the good-looking mode, real motion-compensated frame
@@ -64,6 +79,24 @@ installed and on PATH, and you're good, no script needed.
 
 ## Leg day: running a set
 
+**Easiest way — the guided menu, no flags at all:**
+
+```bash
+# Termux
+bash start.sh
+```
+```cmd
+:: Windows (or just double-click start.bat)
+start.bat
+```
+
+That's `python -m frame60` with no arguments under the hood — it notices
+nothing was given and opens the guided menu automatically. Works the same
+either way: pick your file from a numbered list, answer a handful of
+plain questions, confirm, and it runs.
+
+**Power-user way — flags, if you know what you want:**
+
 Same command everywhere, just swap the input/output names:
 
 ```bash
@@ -85,7 +118,11 @@ python -m frame60 IN OUT [--fps 60] [--mode interpolate|blend|dupe]
                           [--chunk-minutes N] [--max-temp C]
                           [--no-thermal-guard] [--no-hotkeys]
                           [--resume] [--fresh] [--dry-run] [--keep-chunks]
+                          [--wizard]
 ```
+
+`--wizard` forces the guided menu even if you're the type who normally
+uses flags — good for a one-off run where you don't feel like thinking.
 
 `python -m frame60 --help` for the whole menu.
 
@@ -182,6 +219,7 @@ frame60-project/
 │   ├── __init__.py
 │   ├── __main__.py          entry point (python -m frame60)
 │   ├── cli.py                argument parsing + orchestration
+│   ├── menu.py                 guided menu (no flags, plain-language prompts)
 │   ├── config.py              training programs (efficiency profiles), filter templates
 │   ├── ffmpeg_utils.py         ffprobe/ffmpeg command building
 │   ├── chunker.py               split source into chunks (sets), concat output
@@ -190,6 +228,8 @@ frame60-project/
 │   ├── keyboard_control.py        p/r/q hotkeys
 │   ├── session.py                  resumable job state
 │   └── stats.py                     post-workout stats
+├── start.sh                  Termux one-command launcher -> guided menu
+├── start.bat                 Windows double-click launcher -> guided menu
 ├── install.sh                Termux setup
 ├── install.bat                Windows cmd setup
 ├── requirements.txt          (stdlib only — documents that)
@@ -200,6 +240,10 @@ frame60-project/
 
 - `missing required binaries: ffmpeg, ffprobe` — run `install.sh` (Termux)
   or `install.bat` / manual steps (Windows).
+- `start.sh: Permission denied` on Termux — run `chmod +x start.sh` once,
+  or just use `bash start.sh` (works either way, no chmod needed).
+- Double-clicking `start.bat` flashes and closes — that means Python or
+  ffmpeg isn't installed/on PATH yet; run `install.bat` first.
 - Footage looks stuttery in `blend`/`dupe` — expected, that's the
   lightweight-set trade-off. Switch to `--mode interpolate` if your
   device can carry the extra load.
