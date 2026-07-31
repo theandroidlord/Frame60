@@ -26,8 +26,12 @@ def build_parser():
             "or on desktop."
         ),
     )
-    p.add_argument("input", help="source video file")
-    p.add_argument("output", help="destination video file")
+    p.add_argument("input", nargs="?", default=None,
+                    help="source video file (omit both input/output to launch the guided menu)")
+    p.add_argument("output", nargs="?", default=None,
+                    help="destination video file (omit both input/output to launch the guided menu)")
+    p.add_argument("--wizard", action="store_true",
+                    help="force the guided menu (plain-language prompts, no flags needed)")
     p.add_argument("--fps", type=int, default=DEFAULT_TARGET_FPS,
                     help=f"target frame rate (default: {DEFAULT_TARGET_FPS})")
     p.add_argument("--mode", choices=["interpolate", "blend", "dupe"], default=None,
@@ -85,6 +89,20 @@ def _apply_nice(target_nice):
 def main(argv=None):
     args = build_parser().parse_args(argv)
 
+    if args.wizard or (args.input is None and args.output is None):
+        from . import menu
+        args = menu.collect_args()
+        if args is None:
+            return 0
+    elif args.input is None or args.output is None:
+        print("error: need both input and output, or neither (to launch the guided menu). "
+              "Try: python -m frame60", file=sys.stderr)
+        return 1
+
+    return run_job(args)
+
+
+def run_job(args):
     try:
         ffmpeg_utils.check_binaries()
     except ffmpeg_utils.FFmpegNotFoundError as e:
