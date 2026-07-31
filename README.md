@@ -209,6 +209,15 @@ encode speed (as a multiple of realtime), input/output size, size ratio.
 Live progress lines show percent, current speed, elapsed time, and ETA
 while it's grinding.
 
+## Colored output
+
+The progress bar, status lines, and the guided menu are all colored by
+default, with a real block-character bar (`████░░░░`) rather than plain
+ASCII on terminals that support it. Turns itself off automatically when
+output isn't a real terminal (e.g. redirected to a log file) or when
+`NO_COLOR` is set, and self-enables on Windows 10+ cmd with no extra
+install. Force it off yourself with `--no-color`.
+
 ---
 
 ## Project structure
@@ -220,6 +229,7 @@ frame60-project/
 │   ├── __main__.py          entry point (python -m frame60)
 │   ├── cli.py                argument parsing + orchestration
 │   ├── menu.py                 guided menu (no flags, plain-language prompts)
+│   ├── colors.py                ANSI color helper (auto-disables on pipes/NO_COLOR)
 │   ├── config.py              training programs (efficiency profiles), filter templates
 │   ├── ffmpeg_utils.py         ffprobe/ffmpeg command building
 │   ├── chunker.py               split source into chunks (sets), concat output
