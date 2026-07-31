@@ -1,17 +1,25 @@
 """
 Runs one ffmpeg command as a subprocess, parses its machine-readable
-`-progress pipe:1` output, and renders a single-line progress bar with
-percent, encode speed, elapsed time, and ETA. Also exposes pause()/
-resume()/kill() on the live process so the thermal guard and the
-keyboard listener can control it mid-run.
+`-progress pipe:1` output, and renders a single-line colored progress
+bar with percent, encode speed, elapsed time, and ETA. Also exposes
+pause()/resume()/kill() on the live process so the thermal guard and
+the keyboard listener can control it mid-run.
 """
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
 import time
+
+from . import colors
+
+_SPEED_RE = re.compile(r"([\d.]+)x")
+
+# Real block characters look far more "pro" than plain # / - -- but
+# fall back cleanly on terminals that can't render them.
+_FILL_CHAR = "\u2588" if colors.UNICODE_OK else "#"
+_EMPTY_CHAR = "\u2591" if colors.UNICODE_OK else "-"
 
 
 def _fmt_time(seconds):
@@ -26,11 +34,11 @@ def _fmt_time(seconds):
 def _bar(fraction, width=26):
     fraction = max(0.0, min(1.0, fraction))
     filled = int(width * fraction)
-    return "#" * filled + "-" * (width - filled)
+    return colors.green(_FILL_CHAR * filled) + colors.dim(_EMPTY_CHAR * (width - filled))
 
 
 class ProgressRun:
-    """One ffmpeg invocation with a live progress bar and pause/resume."""
+    """One ffmpeg invocation with a live colored progress bar and pause/resume."""
 
     def __init__(self, cmd, total_duration_s, label=""):
         self.cmd = cmd
@@ -41,6 +49,7 @@ class ProgressRun:
         self._start_time = None
         self._last_out_time = 0.0
         self._last_speed = 0.0
+        self._last_visible_len = 0
 
     def start(self):
         self._start_time = time.time()
@@ -75,7 +84,6 @@ class ProgressRun:
 
     def run(self):
         self.start()
-        term_width = shutil.get_terminal_size((80, 20)).columns
         for line in self.process.stdout:
             line = line.strip()
             if "=" not in line:
@@ -87,11 +95,11 @@ class ProgressRun:
                 except ValueError:
                     pass
             elif key == "speed":
-                m = re.match(r"([\d.]+)x", value)
+                m = _SPEED_RE.match(value)
                 if m:
                     self._last_speed = float(m.group(1))
             elif key == "progress":
-                self._render(term_width)
+                self._render()
                 if value == "end":
                     break
         self.process.wait()
@@ -112,15 +120,25 @@ class ProgressRun:
             "out_time_s": self._last_out_time,
         }
 
-    def _render(self, term_width):
+    def _render(self):
         snap = self.snapshot()
         pct = snap["fraction"] * 100
-        state = "PAUSED" if self.paused else ""
+        state = colors.bold_yellow("PAUSED") if self.paused else ""
+        label = colors.bold_cyan(self.label)
+        pct_str = colors.bold(f"{pct:5.1f}%")
+        speed_str = colors.cyan(f"{snap['speed_x']:.2f}x")
+        elapsed_str = colors.dim(_fmt_time(snap["elapsed_s"]))
+        eta_str = colors.yellow(_fmt_time(snap["eta_s"]))
+
         line = (
-            f"\r{self.label} [{_bar(snap['fraction'])}] {pct:5.1f}%  "
-            f"speed {snap['speed_x']:.2f}x  "
-            f"elapsed {_fmt_time(snap['elapsed_s'])}  "
-            f"ETA {_fmt_time(snap['eta_s'])}  {state}"
+            f"\r{label} [{_bar(snap['fraction'])}] {pct_str}  "
+            f"speed {speed_str}  elapsed {elapsed_str}  ETA {eta_str}  {state}"
         )
-        sys.stdout.write(line[:term_width].ljust(min(term_width, len(line))))
+        # Pad (never truncate) based on *visible* length so we clear any
+        # leftover characters from a longer previous line without ever
+        # slicing through an ANSI escape sequence and corrupting color state.
+        visible = colors.visible_len(line)
+        pad = max(0, self._last_visible_len - visible)
+        self._last_visible_len = visible
+        sys.stdout.write(line + (" " * pad))
         sys.stdout.flush()

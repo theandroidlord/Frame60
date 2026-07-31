@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 
-from . import chunker, ffmpeg_utils, keyboard_control, monitor, progress, session, stats
+from . import chunker, colors, ffmpeg_utils, keyboard_control, monitor, progress, session, stats
 from .config import DEFAULT_PROFILE, DEFAULT_TARGET_FPS, FILTER_TEMPLATES, PROFILES
 
 
@@ -60,6 +60,8 @@ def build_parser():
                     help="print the plan and ffmpeg commands without running anything")
     p.add_argument("--keep-chunks", action="store_true",
                     help="keep intermediate chunk files instead of deleting them")
+    p.add_argument("--no-color", action="store_true",
+                    help="disable colored output (also respects the NO_COLOR env var)")
     return p
 
 
@@ -88,6 +90,8 @@ def _apply_nice(target_nice):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.no_color:
+        colors.set_enabled(False)
 
     if args.wizard or (args.input is None and args.output is None):
         from . import menu
@@ -95,8 +99,8 @@ def main(argv=None):
         if args is None:
             return 0
     elif args.input is None or args.output is None:
-        print("error: need both input and output, or neither (to launch the guided menu). "
-              "Try: python -m frame60", file=sys.stderr)
+        print(colors.red("error: need both input and output, or neither (to launch the guided menu). "
+              "Try: python -m frame60"), file=sys.stderr)
         return 1
 
     return run_job(args)
@@ -121,15 +125,16 @@ def run_job(args):
         print(f"error: could not read source video: {e}", file=sys.stderr)
         return 1
 
-    print(f"Source   : {args.input}  ({info.width}x{info.height}, "
+    print(f"{colors.bold_cyan('Source')}   : {args.input}  ({info.width}x{info.height}, "
           f"{info.fps}fps, {info.duration_s / 60:.1f} min, {info.codec})")
-    print(f"Target   : {args.output}  ({args.fps}fps, mode={settings['mode']})")
-    print(f"Profile  : {args.profile}  (threads={settings['threads']}, "
-          f"preset={settings['preset']}, chunk={settings['chunk_minutes']}min, "
-          f"max_temp={settings['max_temp_c']}C)")
+    print(f"{colors.bold_cyan('Target')}   : {args.output}  "
+          f"({colors.bold_green(str(args.fps) + 'fps')}, mode={colors.magenta(settings['mode'])})")
+    print(f"{colors.bold_cyan('Profile')}  : {colors.yellow(args.profile)}  "
+          f"(threads={settings['threads']}, preset={settings['preset']}, "
+          f"chunk={settings['chunk_minutes']}min, max_temp={settings['max_temp_c']}C)")
 
     plan = chunker.plan_chunks(info.duration_s, settings["chunk_minutes"])
-    print(f"Chunks   : {len(plan)}")
+    print(f"{colors.bold_cyan('Chunks')}   : {len(plan)}")
 
     jid = session.job_id(args.input, args.fps, settings["mode"])
     if args.fresh:
@@ -137,12 +142,12 @@ def run_job(args):
     sess = session.Session(jid)
     done = sess.done_indices()
     if done:
-        print(f"Resuming : {len(done)}/{len(plan)} chunks already done (job {jid})")
+        print(colors.yellow(f"Resuming : {len(done)}/{len(plan)} chunks already done (job {jid})"))
     elif not args.resume:
         pass  # fresh job, nothing to resume
 
     if args.dry_run:
-        print(f"Job ID   : {jid}")
+        print(f"{colors.bold_cyan('Job ID')}   : {jid}")
         for index, start_s, length_s in plan:
             cmd = ffmpeg_utils.build_command(
                 f"<chunk_{index}_src.mp4>", f"<chunk_{index}_out.mp4>",
@@ -150,7 +155,7 @@ def run_job(args):
                 threads=settings["threads"], preset=settings["preset"],
                 filter_templates=FILTER_TEMPLATES,
             )
-            tag = "skip (done)" if index in done else "run "
+            tag = colors.dim("skip (done)") if index in done else colors.green("run ")
             print(f"  [{tag}] chunk {index} ({length_s / 60:.1f}min): {' '.join(cmd)}")
         return 0
 
@@ -166,7 +171,7 @@ def run_job(args):
         quit_requested["flag"] = True
 
     def log_event(msg):
-        print(f"\n[frame60] {msg}")
+        print(f"\n{colors.cyan('[frame60]')} {msg}")
 
     guard = None
     if not args.no_thermal_guard:
@@ -175,8 +180,10 @@ def run_job(args):
         )
         guard.start()
         if not guard.available:
-            print("[frame60] note: no readable temperature sensor on this device -- "
-                  "lag protection is inactive. Stay conservative with --threads/--profile.")
+            print(colors.yellow(
+                f"{colors.WARN} no readable temperature sensor on this device -- "
+                "lag protection is inactive. Stay conservative with --threads/--profile."
+            ))
 
     # Let 'em tap out mid-set if they need to -- p/r/q only works on a
     # real POSIX terminal, so this quietly no-ops on Windows cmd.
@@ -185,7 +192,8 @@ def run_job(args):
         listener = keyboard_control.KeyListener(get_run, request_quit, on_event=log_event)
         listener.start()
         if listener.enabled:
-            print("[frame60] hotkeys: p = pause, r = resume, q = quit & save progress")
+            print(f"{colors.cyan('[frame60]')} hotkeys: {colors.bold('p')} = pause, "
+                  f"{colors.bold('r')} = resume, {colors.bold('q')} = quit & save progress")
 
     _apply_nice(settings["nice"])
 
@@ -214,8 +222,10 @@ def run_job(args):
             current_run["run"] = None
 
             if rc != 0:
-                print(f"\n[frame60] chunk {index} failed (ffmpeg exit {rc}); stopping. "
-                      f"Re-run with --resume once fixed (job {jid}).")
+                print(colors.bold_red(
+                    f"\n[frame60] {colors.CROSS} chunk {index} failed (ffmpeg exit {rc}); stopping. "
+                    f"Re-run with --resume once fixed (job {jid})."
+                ))
                 break
 
             out_size = os.path.getsize(out_chunk)
@@ -225,18 +235,20 @@ def run_job(args):
                 os.remove(src_chunk)
 
             if quit_requested["flag"]:
-                print(f"\n[frame60] stopping after this chunk as requested. "
-                      f"Re-run with --resume to continue (job {jid}).")
+                print(colors.yellow(
+                    f"\n[frame60] stopping after this chunk as requested. "
+                    f"Re-run with --resume to continue (job {jid})."
+                ))
                 break
         else:
             ordered = [
                 c["output"] for c in sorted(sess.data["chunks_done"], key=lambda c: c["index"])
             ]
-            print("\n[frame60] all chunks done -- merging final file...")
+            print(f"\n{colors.cyan('[frame60]')} all chunks done -- merging final file...")
             chunker.concat_chunks(ordered, args.output, workdir)
             sess.clear()
             completed_all = True
-            print(f"[frame60] done: {args.output}")
+            print(colors.bold_green(f"[frame60] {colors.CHECK} done: {args.output}"))
     finally:
         if guard:
             guard.stop()
@@ -246,7 +258,7 @@ def run_job(args):
         if completed_all and not args.keep_chunks:
             shutil.rmtree(workdir, ignore_errors=True)
         elif not completed_all:
-            print(f"[frame60] intermediate files kept in: {workdir}")
+            print(colors.dim(f"[frame60] intermediate files kept in: {workdir}"))
 
     return 0 if completed_all or quit_requested["flag"] else 1
 

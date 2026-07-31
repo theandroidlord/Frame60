@@ -11,6 +11,7 @@ engine underneath, just a different front door.
 import argparse
 import os
 
+from . import colors
 from . import session as session_mod
 from .config import DEFAULT_TARGET_FPS, PROFILES
 
@@ -36,9 +37,9 @@ def is_termux():
 
 
 def _ask(prompt, default=None):
-    suffix = f" [{default}]" if default not in (None, "") else ""
+    suffix = colors.dim(f" [{default}]") if default not in (None, "") else ""
     try:
-        raw = input(f"{prompt}{suffix}: ").strip()
+        raw = input(f"{colors.bold(prompt)}{suffix}: ").strip()
     except EOFError:
         raw = ""
     return raw if raw else default
@@ -54,20 +55,20 @@ def _ask_yes_no(prompt, default=True):
             return True
         if raw.lower() in ("n", "no"):
             return False
-        print("  Just y or n, whichever's closer.")
+        print(colors.dim("  Just y or n, whichever's closer."))
 
 
 def _ask_choice(prompt, items, blurbs, default_index=0):
-    print(prompt)
+    print(colors.bold(prompt))
     for i, key in enumerate(items, 1):
-        marker = "  <- default" if (i - 1) == default_index else ""
-        print(f"  {i}. {key}{marker}")
-        print(f"     {blurbs.get(key, '')}")
+        marker = colors.green("  <- default") if (i - 1) == default_index else ""
+        print(f"  {colors.cyan(f'{i}.')} {colors.bold(key)}{marker}")
+        print(f"     {colors.dim(blurbs.get(key, ''))}")
     while True:
         raw = _ask("Pick a number", str(default_index + 1))
         if raw is not None and raw.isdigit() and 1 <= int(raw) <= len(items):
             return items[int(raw) - 1]
-        print(f"  Enter a number from 1 to {len(items)}.")
+        print(colors.dim(f"  Enter a number from 1 to {len(items)}."))
 
 
 def _find_video_files():
@@ -82,10 +83,11 @@ def _ask_input_file():
     found = _find_video_files()
     while True:
         if found:
-            print("\nVideo files found in this folder:")
+            print(colors.bold("\nVideo files found in this folder:"))
             for i, name in enumerate(found, 1):
-                print(f"  {i}. {name}")
-            print(f"  {len(found) + 1}. Type/paste a different path instead")
+                print(f"  {colors.cyan(f'{i}.')} {name}")
+            print(f"  {colors.cyan(f'{len(found) + 1}.')} "
+                  f"{colors.dim('Type/paste a different path instead')}")
             raw = _ask("Pick a number, or paste a path")
             if raw and raw.isdigit() and 1 <= int(raw) <= len(found):
                 return found[int(raw) - 1]
@@ -94,7 +96,19 @@ def _ask_input_file():
             path = _ask("No video files spotted in this folder -- paste the path to your file")
         if path and os.path.exists(path):
             return path
-        print(f"  Can't find that file: {path!r}. Try again.")
+        print(colors.red(f"  Can't find that file: {path!r}. Try again."))
+
+
+def _print_banner():
+    if colors.UNICODE_OK:
+        title = " frame60 -- guided setup (no commands needed) ".center(48)
+        print(colors.bold_cyan("\u250c" + "\u2500" * 48 + "\u2510"))
+        print(colors.bold_cyan("\u2502") + colors.bold(title) + colors.bold_cyan("\u2502"))
+        print(colors.bold_cyan("\u2514" + "\u2500" * 48 + "\u2518"))
+    else:
+        print(colors.bold_cyan("=" * 50))
+        print(colors.bold(" frame60 -- guided setup (no commands needed)"))
+        print(colors.bold_cyan("=" * 50))
 
 
 def _suggest_output_name(input_path, fps):
@@ -105,9 +119,7 @@ def _suggest_output_name(input_path, fps):
 def collect_args():
     """Walk the user through every setting in plain language. Returns
     None if they bail out at any point (nothing gets touched either way)."""
-    print("=" * 50)
-    print(" frame60 -- guided setup (no commands needed)")
-    print("=" * 50)
+    _print_banner()
 
     try:
         input_path = _ask_input_file()
@@ -157,22 +169,23 @@ def collect_args():
             else:
                 fresh = True
 
-        print("\n--- summary ---")
-        print(f"Input    : {input_path}")
-        print(f"Output   : {output_path}")
-        print(f"FPS      : {fps}")
-        print(f"Profile  : {profile}")
-        print(f"Mode     : {mode_for_id}" + ("" if mode else " (from profile)"))
+        mode_line = mode_for_id if mode else f"{mode_for_id} {colors.dim('(from profile)')}"
+        print(colors.bold_cyan("\n--- summary ---"))
+        print(f"{colors.dim('Input')}    : {input_path}")
+        print(f"{colors.dim('Output')}   : {output_path}")
+        print(f"{colors.dim('FPS')}      : {colors.bold_green(str(fps))}")
+        print(f"{colors.dim('Profile')}  : {colors.yellow(profile)}")
+        print(f"{colors.dim('Mode')}     : {mode_line}")
         if resume:
-            print("Resuming : yes, previous progress will be reused")
-        print("---------------")
+            print(colors.yellow("Resuming : yes, previous progress will be reused"))
+        print(colors.bold_cyan("---------------"))
 
         if not _ask_yes_no("\nStart converting now?", True):
-            print("No problem -- nothing was touched. Run it again whenever you're ready.")
+            print(colors.yellow("No problem -- nothing was touched. Run it again whenever you're ready."))
             return None
 
     except KeyboardInterrupt:
-        print("\nCancelled -- nothing was touched.")
+        print(colors.yellow("\nCancelled -- nothing was touched."))
         return None
 
     return argparse.Namespace(

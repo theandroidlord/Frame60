@@ -5,6 +5,8 @@ writes stats.json alongside the output) once the job finishes or stops.
 import json
 import time
 
+from . import colors
+
 
 def _human_bytes(n):
     for unit in ("B", "KB", "MB", "GB"):
@@ -47,13 +49,16 @@ class StatsCollector:
 
     def print_summary(self):
         s = self.summary()
-        print("\n--- frame60 summary ---")
-        print(f"Chunks processed : {s['chunks_processed']}")
-        print(f"Total time       : {s['total_elapsed_s'] / 60:.1f} min")
-        print(f"Avg encode speed : {s['avg_speed_x']}x realtime")
-        print(f"Input size       : {_human_bytes(s['input_bytes'])}")
-        print(f"Output size      : {_human_bytes(s['output_bytes'])}")
-        print(f"Size ratio       : {s['size_ratio']}x")
+        total_min = s["total_elapsed_s"] / 60
+        speed_label = f"{s['avg_speed_x']}x realtime"
+        ratio_label = f"{s['size_ratio']}x"
+        print(f"\n{colors.bold_cyan('--- frame60 summary ---')}")
+        print(f"{colors.dim('Chunks processed')} : {s['chunks_processed']}")
+        print(f"{colors.dim('Total time')}       : {total_min:.1f} min")
+        print(f"{colors.dim('Avg encode speed')} : {colors.cyan(speed_label)}")
+        print(f"{colors.dim('Input size')}       : {_human_bytes(s['input_bytes'])}")
+        print(f"{colors.dim('Output size')}      : {_human_bytes(s['output_bytes'])}")
+        print(f"{colors.dim('Size ratio')}       : {colors.bold(ratio_label)}")
 
     def write_json(self, path):
         with open(path, "w") as f:
